@@ -10,8 +10,54 @@ const { errorResponder, errorTypes } = require('../../../core/errors');
  */
 async function getUsers(request, response, next) {
   try {
-    const users = await usersService.getUsers();
-    return response.status(200).json(users);
+    const currentPage = parseInt(request.query.page) || 1;
+    const perPage = parseInt(request.query.perPage) || 5;
+    let users = await usersService.getUsers();
+
+    // Sorting
+    const sortingQuery = request.query.sort;
+    if (sortingQuery) {
+      const [sortField, sortOrder] = sortingQuery.split(':');
+      if (sortField === 'email' || sortField === 'name') {
+        users.sort((a, b) => {
+          if (a[sortField] < b[sortField]) return sortOrder === 'asc' ? -1 : 1;
+          if (a[sortField] > b[sortField]) return sortOrder === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+    }
+
+    // Searching
+    const searchingQuery = request.query.search;
+    if (searchingQuery) {
+      const [searchField, searchKey] = searchingQuery.split(':');
+      if (searchField === 'email' || searchField === 'name') {
+        users = users.filter((user) =>
+          user[searchField].toLowerCase().includes(searchKey.toLowerCase())
+        );
+      }
+    }
+
+    const totalItem = users.length;
+    const totalPages = Math.ceil(totalItem / perPage);
+
+    const result = users.slice(
+      (currentPage - 1) * perPage,
+      currentPage * perPage
+    );
+
+    const hasNextPage = currentPage < totalPages;
+    const hasPreviousPage = currentPage > 1;
+
+    response.status(200).json({
+      Page_Number: parseInt(currentPage),
+      Page_Size: parseInt(perPage),
+      Count: parseInt(totalItem),
+      Total_Pages: parseInt(totalPages),
+      Has_Previous_Page: !!hasPreviousPage,
+      Has_Next_Page: !!hasNextPage,
+      Data: result,
+    });
   } catch (error) {
     return next(error);
   }
